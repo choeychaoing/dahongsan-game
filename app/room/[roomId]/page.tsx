@@ -164,10 +164,10 @@ export default function RoomPage() {
         {isHost ? (
           <button
             onClick={startGame}
-            disabled={room?.playerCount !== 5}
+            disabled={room?.playerCount < 1}
             className="w-full py-3 bg-red-600 text-white rounded-xl font-bold text-lg hover:bg-red-700 active:scale-95 transition disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            {room?.playerCount === 5 ? '🚀 开始游戏' : `等待 ${5 - (room?.playerCount ?? 0)} 人加入`}
+            {room?.playerCount === 5 ? '🚀 开始游戏' : `开始游戏（AI 将自动补位）`}
           </button>
         ) : (
           <div className="text-center text-gray-500 py-3">
