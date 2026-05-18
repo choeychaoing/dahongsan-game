@@ -37,6 +37,19 @@ export default function RoomPage() {
   const [error, setError] = useState('');
   const socketRef = useRef<Socket | null>(null);
 
+  // 读取玩家名称（支持 URL 参数中的 botName）
+  const getPlayerName = () => {
+    if (typeof window === 'undefined') return '玩家';
+    // 优先取 URL 参数
+    const urlParams = new URLSearchParams(window.location.search);
+    const botName = urlParams.get('botName');
+    if (botName) {
+      localStorage.setItem('playerName', botName);
+      return botName;
+    }
+    return localStorage.getItem('playerName') ?? '玩家';
+  };
+
   useEffect(() => {
     const s = getSocket();
     socketRef.current = s;
@@ -46,7 +59,7 @@ export default function RoomPage() {
       sessionStorage.setItem('mySocketId', s.id!);
 
       // 重连时重新加入房间
-      const name = localStorage.getItem('playerName') ?? '玩家';
+      const name = getPlayerName();
       s.emit('set_name', name);
       s.emit('join_room', roomId, (res: { success: boolean; room?: RoomInfo; error?: string }) => {
         if (res.success && res.room) {
@@ -62,7 +75,7 @@ export default function RoomPage() {
     };
 
     const onGameState = (state: unknown) => {
-      // 将 gameState 存入 sessionStorage，game 页面直接读取
+      // 存入 sessionStorage，game 页面直接读取（避免 socket 还没好就跳转）
       sessionStorage.setItem('pendingGameState', JSON.stringify(state));
       router.push(`/game/${roomId}`);
     };
@@ -89,7 +102,7 @@ export default function RoomPage() {
     navigator.clipboard?.writeText(roomId).catch(() => {});
   };
 
-  const playerName = localStorage.getItem('playerName') ?? '玩家';
+  const playerName = getPlayerName();
   const isHost = room?.hostId === myId || room?.hostName === playerName;
 
   return (

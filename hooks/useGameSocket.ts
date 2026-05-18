@@ -46,6 +46,18 @@ export function useGameSocket(roomId: string | null) {
   const [gameOver, setGameOver] = useState<GameResult | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // 优先从 sessionStorage 读取（房间页面跳转时已缓存）
+  useEffect(() => {
+    const cached = sessionStorage.getItem('pendingGameState');
+    if (cached) {
+      try {
+        const state = JSON.parse(cached) as GameStateView;
+        setGameState(state);
+        sessionStorage.removeItem('pendingGameState');
+      } catch {}
+    }
+  }, []);
+
   useEffect(() => {
     if (!socket) return;
 

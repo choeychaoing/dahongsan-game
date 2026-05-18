@@ -303,8 +303,40 @@ async function main() {
 
   // 2. 创建 HTTP 服务器，代理给 Next.js
   const httpServer = createServer((req, res) => {
-    const parsedUrl = parse(req.url, true);
-    handle(req, res, parsedUrl);
+    const urlObj = parse(req.url || '', true);
+    // 测试接口：直接注入机器人，跳过 Next.js
+    if (req.method === 'POST' && urlObj.pathname === '/api/test/add-bots') {
+      let body = '';
+      req.on('data', (chunk: Buffer) => { body += chunk; });
+      req.once('end', () => {
+        try {
+          const data = JSON.parse(body);
+          const room = rooms.get(String(data.roomId || '').toUpperCase());
+          if (!room) {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ ok: false, error: '房间不存在' }));
+            return;
+          }
+          let joined = 0;
+          (data.botNames || []).forEach((name: string) => {
+            room.players.push(makePlayer(
+              'bot_' + Math.random().toString(36).slice(2, 10),
+              String(name).slice(0, 30)
+            ));
+            joined++;
+          });
+          io.to(room.id).emit('room_updated', sanitizeRoom(room));
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: true, joined, playerCount: room.players.length }));
+        } catch {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: false, error: '解析失败' }));
+        }
+      });
+      return;
+    }
+    // 正常请求走 Next.js
+    handle(req, res, urlObj);
   });
 
   // 3. 挂载 Socket.IO
