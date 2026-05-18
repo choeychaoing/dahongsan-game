@@ -1,0 +1,18 @@
+{
+  "preset": "ts-jest",
+  "testEnvironment": "node",
+  "moduleNameMapper": {
+    "^@/(.*)$": "<rootDir>/$1"
+  },
+  "transform": {
+    "^.+\\.tsx?$": ["ts-jest", {
+      "tsconfig": {
+        "module": "commonjs",
+        "moduleResolution": "node",
+        "noEmit": false,
+        "rootDir": ".",
+        "ignoreDeprecations": "6.0"
+      }
+    }]
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "$schema": "https://zeit.co/schema.json",
+  "builds": [
+    { "src": "package.json", "use": "@vercel/next" }
+  ],
+  "routes": [
+    { "src": "/socket.io/(.*)", "dest": "/server.cjs" },
+    { "src": "/(.*)", "dest": "/server.cjs" }
+  ],
+  "env": {
+    "NODE_ENV": "production"
+  }
+}
