@@ -86,6 +86,31 @@ export default function HomePage() {
     });
   };
 
+  const quickStart = () => {
+    if (!name.trim()) {
+      setError('请先输入昵称');
+      return;
+    }
+    setPlayerName();
+    socketRef.current?.emit('create_room', (res: { success: boolean; roomId?: string; error?: string }) => {
+      if (res.success && res.roomId) {
+        const roomId = res.roomId;
+        sessionStorage.setItem('mySocketId', socketRef.current!.id!);
+        // 直接开始游戏（服务端会自动补位机器人）
+        socketRef.current?.emit('start_game', (startRes: { success: boolean; error?: string }) => {
+          if (startRes.success) {
+            // 游戏已开始，直接跳转到游戏页面
+            router.push(`/game/${roomId}`);
+          } else {
+            setError(startRes.error ?? '开始失败');
+          }
+        });
+      } else {
+        setError(res.error ?? '创建失败');
+      }
+    });
+  };
+
   const joinRoom = (roomId?: string) => {
     const id = (roomId ?? joinRoomId).trim().toUpperCase();
     if (!id) {
@@ -143,6 +168,16 @@ export default function HomePage() {
             {error}
           </div>
         )}
+
+        {/* 快速开始：创建房间 + 自动补位机器人 + 直接开始 */}
+        <button
+          onClick={quickStart}
+          className="w-full py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl font-bold text-lg hover:from-purple-700 hover:to-pink-700 active:scale-95 transition mb-3 shadow-lg"
+        >
+          🚀 快速开始（AI 对战）
+        </button>
+
+        <div className="text-center text-xs text-gray-400 mb-3">— 或 —</div>
 
         {/* 创建房间 */}
         <button
