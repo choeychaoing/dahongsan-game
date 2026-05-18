@@ -17,7 +17,7 @@ const dev = process.env.NODE_ENV !== 'production';
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
 const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
 const OPENAI_BASE_URL = (process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, '');
-const BOT_THINK_TIME = parseInt(process.env.BOT_THINK_TIME || '1000', 10); // 机器人思考延迟（毫秒）
+const BOT_THINK_TIME = parseInt(process.env.BOT_THINK_TIME || '1000', 10);
 const botTasks = new Map(); // botId -> { roomId, timer }
 
 function clearBotTask(botId) {
@@ -342,7 +342,7 @@ async function askGPTPlay(roomId, botId) {
 
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 5000); // 5秒超时
+    const timeout = setTimeout(() => controller.abort(), 5000);
 
     const response = await fetch(`${OPENAI_BASE_URL}/chat/completions`, {
       method: 'POST',
@@ -512,13 +512,12 @@ function broadcastGameState(roomId, io) {
 
 function scheduleBotIfNeeded(roomId, io) {
   const room = rooms.get(roomId);
-  if (!room?.gameState) { console.log(`[BOT] scheduleBotIfNeeded: no room/gameState for ${roomId}`); return; }
+  if (!room?.gameState) return;
   const state = room.gameState;
-  if (state.status !== 'playing') { console.log(`[BOT] scheduleBotIfNeeded: status=${state.status}, not playing`); return; }
+  if (state.status !== 'playing') return;
 
   const currentPlayer = state.players[state.currentPlayerIndex];
-  if (!currentPlayer) { console.log(`[BOT] scheduleBotIfNeeded: no currentPlayer at idx ${state.currentPlayerIndex}`); return; }
-  if (!currentPlayer.id.startsWith('bot_')) { return; } // human turn, skip
+  if (!currentPlayer || !currentPlayer.id.startsWith('bot_')) return;
 
   const botId = currentPlayer.id;
   clearBotTask(botId);
@@ -565,30 +564,30 @@ async function executeBotWindDecision(botId, roomId, io) {
 
 async function executeBotTurn(botId, roomId, io) {
   clearBotTask(botId);
-  console.log(`[BOT] executeBotTurn: bot=${botId} room=${roomId}`);
   const room = rooms.get(roomId);
-  if (!room?.gameState) { console.log("[BOT] room/gameState gone"); return; }
+  if (!room?.gameState) return;
   const state = room.gameState;
-  if (state.status !== 'playing') { console.log(`[BOT] status=${state.status}`); return; }
+  if (state.status !== 'playing') return;
 
   const currentPlayer = state.players[state.currentPlayerIndex];
-  if (!currentPlayer || currentPlayer.id !== botId) { console.log("[BOT] not current player"); return; }
+  if (!currentPlayer || currentPlayer.id !== botId) return;
 
-  console.log(`[BOT] ${currentPlayer.name} thinking...`);
   const decision = await askGPTPlay(roomId, botId);
-  if (!decision) { console.log("[BOT] no decision, passing"); doPass(roomId, botId); broadcastGameState(roomId, io); return; }
+  if (!decision) return;
 
   if (decision.action === 'pass') {
-    console.log(`[BOT] ${currentPlayer.name} passes`);
     doPass(roomId, botId);
   } else if (decision.action === 'play') {
-    console.log(`[BOT] ${currentPlayer.name} plays ${decision.cardIds.length} cards`);
     const result = doPlay(roomId, botId, decision.cardIds, io);
     if (!result.success) {
-      console.error(`[BOT] ${currentPlayer.name} play failed:`, result.error);
+      console.error(`[BOT] ${currentPlayer.name} 出牌失败:`, result.error);
+      // 失败时降级
       const fallback = getFallbackDecision(state, currentPlayer);
-      if (fallback.action === 'play') doPlay(roomId, botId, fallback.cardIds, io);
-      else doPass(roomId, botId);
+      if (fallback.action === 'play') {
+        doPlay(roomId, botId, fallback.cardIds, io);
+      } else {
+        doPass(roomId, botId);
+      }
     }
     if (result.finished) {
       io.to(roomId).emit('game_over', result.gameResult);
@@ -752,14 +751,13 @@ async function main() {
       roomId = String(roomId).toUpperCase();
       const room = rooms.get(roomId);
       if (!room) { cb({ success: false, error: '房间不存在' }); return; }
-      if (room.status !== 'waiting') { cb({ success: false, error: '游戏已开始' }); return; }
-      // 检查是否已有同名玩家（同一浏览器不同标签页）
+      // 允许加入已开始的游戏（同一人重连或从房间页跳转）
       const existingByName = room.players.find(p => p.name === playerName);
       if (existingByName) {
-        // 同名玩家：更新 socket id（视为同一人重连），不新增
         existingByName.id = socket.id;
-        // 如果断线前是房主，更新房主
         if (room.hostName === playerName) room.hostId = socket.id;
+      } else if (room.status !== 'waiting') {
+        cb({ success: false, error: '游戏已开始，无法加入' }); return;
       } else if (room.players.length >= 5) {
         cb({ success: false, error: '房间已满' }); return;
       } else {
@@ -768,8 +766,15 @@ async function main() {
       currentRoomId = roomId;
       socket.join(roomId);
       socket.to(roomId).emit('room_updated', sanitizeRoom(room));
-      cb({ success: true, room: sanitizeRoom(room) });
-      console.log(`[R] ${playerName} 加入房间 ${roomId}`);
+      // 如果游戏已在进行中，立即返回游戏状态
+      if (room.gameState) {
+        const view = buildGameStateView(roomId, socket.id);
+        cb({ success: true, room: sanitizeRoom(room), gameState: view });
+        console.log(`[R] ${playerName} 重新加入运行中游戏 ${roomId}`);
+      } else {
+        cb({ success: true, room: sanitizeRoom(room) });
+        console.log(`[R] ${playerName} 加入房间 ${roomId}`);
+      }
     });
 
     socket.on('get_rooms', (cb) => {
@@ -913,13 +918,11 @@ async function main() {
 
   // 4. 启动监听
   httpServer.listen(PORT, '0.0.0.0', () => {
-    console.log(`[SERVER] Game server running on 0.0.0.0:${PORT}`);
-    console.log(`[SERVER] BOT_THINK_TIME=${BOT_THINK_TIME}ms, API_TIMEOUT=5000ms`);
-    console.log(`[SERVER] OPENAI_API_KEY: ${OPENAI_API_KEY ? 'configured' : 'NOT_SET (fallback)'}`);
+    console.log(`🃏 打红三 运行在 http://localhost:${PORT}`);
   });
 }
 
 main().catch(err => {
-  console.error('[SERVER] FAILED TO START:', err.message);
+  console.error('启动失败:', err);
   process.exit(1);
 });
