@@ -307,7 +307,7 @@ async function main() {
     // 测试接口：直接注入机器人，跳过 Next.js
     if (req.method === 'POST' && urlObj.pathname === '/api/test/add-bots') {
       let body = '';
-      req.on('data', (chunk: Buffer) => { body += chunk; });
+      req.on('data', (chunk) => { body += chunk; });
       req.once('end', () => {
         try {
           const data = JSON.parse(body);
