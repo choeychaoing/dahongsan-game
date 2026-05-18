@@ -17,7 +17,7 @@ const dev = process.env.NODE_ENV !== 'production';
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
 const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
 const OPENAI_BASE_URL = (process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, '');
-const BOT_THINK_TIME = parseInt(process.env.BOT_THINK_TIME || '2000', 10);
+const BOT_THINK_TIME = parseInt(process.env.BOT_THINK_TIME || '1000', 10); // 机器人思考延迟（毫秒）
 const botTasks = new Map(); // botId -> { roomId, timer }
 
 function clearBotTask(botId) {
@@ -342,7 +342,7 @@ async function askGPTPlay(roomId, botId) {
 
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 8000);
+    const timeout = setTimeout(() => controller.abort(), 5000); // 5秒超时
 
     const response = await fetch(`${OPENAI_BASE_URL}/chat/completions`, {
       method: 'POST',
@@ -512,12 +512,13 @@ function broadcastGameState(roomId, io) {
 
 function scheduleBotIfNeeded(roomId, io) {
   const room = rooms.get(roomId);
-  if (!room?.gameState) return;
+  if (!room?.gameState) { console.log(`[BOT] scheduleBotIfNeeded: no room/gameState for ${roomId}`); return; }
   const state = room.gameState;
-  if (state.status !== 'playing') return;
+  if (state.status !== 'playing') { console.log(`[BOT] scheduleBotIfNeeded: status=${state.status}, not playing`); return; }
 
   const currentPlayer = state.players[state.currentPlayerIndex];
-  if (!currentPlayer || !currentPlayer.id.startsWith('bot_')) return;
+  if (!currentPlayer) { console.log(`[BOT] scheduleBotIfNeeded: no currentPlayer at idx ${state.currentPlayerIndex}`); return; }
+  if (!currentPlayer.id.startsWith('bot_')) { return; } // human turn, skip
 
   const botId = currentPlayer.id;
   clearBotTask(botId);
@@ -564,30 +565,30 @@ async function executeBotWindDecision(botId, roomId, io) {
 
 async function executeBotTurn(botId, roomId, io) {
   clearBotTask(botId);
+  console.log(`[BOT] executeBotTurn: bot=${botId} room=${roomId}`);
   const room = rooms.get(roomId);
-  if (!room?.gameState) return;
+  if (!room?.gameState) { console.log("[BOT] room/gameState gone"); return; }
   const state = room.gameState;
-  if (state.status !== 'playing') return;
+  if (state.status !== 'playing') { console.log(`[BOT] status=${state.status}`); return; }
 
   const currentPlayer = state.players[state.currentPlayerIndex];
-  if (!currentPlayer || currentPlayer.id !== botId) return;
+  if (!currentPlayer || currentPlayer.id !== botId) { console.log("[BOT] not current player"); return; }
 
+  console.log(`[BOT] ${currentPlayer.name} thinking...`);
   const decision = await askGPTPlay(roomId, botId);
-  if (!decision) return;
+  if (!decision) { console.log("[BOT] no decision, passing"); doPass(roomId, botId); broadcastGameState(roomId, io); return; }
 
   if (decision.action === 'pass') {
+    console.log(`[BOT] ${currentPlayer.name} passes`);
     doPass(roomId, botId);
   } else if (decision.action === 'play') {
+    console.log(`[BOT] ${currentPlayer.name} plays ${decision.cardIds.length} cards`);
     const result = doPlay(roomId, botId, decision.cardIds, io);
     if (!result.success) {
-      console.error(`[BOT] ${currentPlayer.name} 出牌失败:`, result.error);
-      // 失败时降级
+      console.error(`[BOT] ${currentPlayer.name} play failed:`, result.error);
       const fallback = getFallbackDecision(state, currentPlayer);
-      if (fallback.action === 'play') {
-        doPlay(roomId, botId, fallback.cardIds, io);
-      } else {
-        doPass(roomId, botId);
-      }
+      if (fallback.action === 'play') doPlay(roomId, botId, fallback.cardIds, io);
+      else doPass(roomId, botId);
     }
     if (result.finished) {
       io.to(roomId).emit('game_over', result.gameResult);
@@ -912,11 +913,13 @@ async function main() {
 
   // 4. 启动监听
   httpServer.listen(PORT, '0.0.0.0', () => {
-    console.log(`🃏 打红三 运行在 http://localhost:${PORT}`);
+    console.log(`[SERVER] Game server running on 0.0.0.0:${PORT}`);
+    console.log(`[SERVER] BOT_THINK_TIME=${BOT_THINK_TIME}ms, API_TIMEOUT=5000ms`);
+    console.log(`[SERVER] OPENAI_API_KEY: ${OPENAI_API_KEY ? 'configured' : 'NOT_SET (fallback)'}`);
   });
 }
 
 main().catch(err => {
-  console.error('启动失败:', err);
+  console.error('[SERVER] FAILED TO START:', err.message);
   process.exit(1);
 });
