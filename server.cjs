@@ -181,7 +181,7 @@ function getNextActive(state, currentIdx) {
 }
 function sanitizeRoom(room) {
   return {
-    id: room.id, hostId: room.hostId, status: room.status,
+    id: room.id, hostId: room.hostId, hostName: room.hostName, status: room.status,
     playerCount: room.players.length,
     players: room.players.map(p => ({ id: p.id, name: p.name, status: p.status })),
   };
@@ -328,6 +328,7 @@ async function main() {
       const room = {
         id: Math.random().toString(36).slice(2, 8).toUpperCase(),
         hostId: socket.id,
+        hostName: playerName,
         players: [makePlayer(socket.id, playerName)],
         status: 'waiting', gameState: null, createdAt: Date.now(),
       };
@@ -343,10 +344,16 @@ async function main() {
       const room = rooms.get(roomId);
       if (!room) { cb({ success: false, error: '房间不存在' }); return; }
       if (room.status !== 'waiting') { cb({ success: false, error: '游戏已开始' }); return; }
-      if (room.players.length >= 5 && !room.players.some(p => p.id === socket.id)) {
+      // 检查是否已有同名玩家（同一浏览器不同标签页）
+      const existingByName = room.players.find(p => p.name === playerName);
+      if (existingByName) {
+        // 同名玩家：更新 socket id（视为同一人重连），不新增
+        existingByName.id = socket.id;
+        // 如果断线前是房主，更新房主
+        if (room.hostName === playerName) room.hostId = socket.id;
+      } else if (room.players.length >= 5) {
         cb({ success: false, error: '房间已满' }); return;
-      }
-      if (!room.players.some(p => p.id === socket.id)) {
+      } else {
         room.players.push(makePlayer(socket.id, playerName));
       }
       currentRoomId = roomId;
@@ -454,7 +461,10 @@ async function main() {
         if (room.players.length === 0) {
           rooms.delete(currentRoomId);
         } else {
-          if (room.hostId === socket.id) room.hostId = room.players[0].id;
+          if (room.hostId === socket.id) {
+            room.hostId = room.players[0].id;
+            room.hostName = room.players[0].name;
+          }
           socket.to(currentRoomId).emit('room_updated', sanitizeRoom(room));
         }
       }

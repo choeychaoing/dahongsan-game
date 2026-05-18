@@ -22,6 +22,7 @@ interface PlayerInfo {
 interface RoomInfo {
   id: string;
   hostId: string;
+  hostName?: string;
   status: string;
   playerCount: number;
   players: PlayerInfo[];
@@ -86,7 +87,8 @@ export default function RoomPage() {
     navigator.clipboard?.writeText(roomId).catch(() => {});
   };
 
-  const isHost = room?.hostId === myId;
+  const playerName = localStorage.getItem('playerName') ?? '玩家';
+  const isHost = room?.hostId === myId || room?.hostName === playerName;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-900 to-green-700 flex items-center justify-center p-4">
