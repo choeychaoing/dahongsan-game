@@ -97,10 +97,12 @@ export default function HomePage() {
         const roomId = res.roomId;
         sessionStorage.setItem('mySocketId', socketRef.current!.id!);
         // 直接开始游戏（服务端会自动补位机器人）
-        socketRef.current?.emit('start_game', (startRes: { success: boolean; error?: string }) => {
-          if (startRes.success) {
-            // 游戏已开始，直接跳转到游戏页面
-            router.push(`/game/${roomId}`);
+        socketRef.current?.emit('start_game', (startRes: { success: boolean; gameState?: unknown; error?: string }) => {
+          if (startRes.success && startRes.gameState) {
+            // 关键修复：保存 gameState 到 sessionStorage，供游戏页面直接读取
+            sessionStorage.setItem('pendingGameState', JSON.stringify(startRes.gameState));
+            // 跳转到房间页面（它会监听 game_state 并跳转到游戏）
+            router.push(`/room/${roomId}`);
           } else {
             setError(startRes.error ?? '开始失败');
           }

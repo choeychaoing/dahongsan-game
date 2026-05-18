@@ -61,9 +61,14 @@ export default function RoomPage() {
       // 重连时重新加入房间
       const name = getPlayerName();
       s.emit('set_name', name);
-      s.emit('join_room', roomId, (res: { success: boolean; room?: RoomInfo; error?: string }) => {
-        if (res.success && res.room) {
-          setRoom(res.room);
+      s.emit('join_room', roomId, (res: { success: boolean; room?: RoomInfo; gameState?: unknown; error?: string }) => {
+        if (res.success) {
+          setRoom(res.room ?? null);
+          // 如果游戏已开始，直接跳转到游戏页面
+          if (res.gameState) {
+            sessionStorage.setItem('pendingGameState', JSON.stringify(res.gameState));
+            router.push(`/game/${roomId}`);
+          }
         } else {
           setError(res.error ?? '加入失败');
         }

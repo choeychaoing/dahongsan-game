@@ -572,16 +572,30 @@ async function executeBotTurn(botId, roomId, io) {
   const currentPlayer = state.players[state.currentPlayerIndex];
   if (!currentPlayer || currentPlayer.id !== botId) return;
 
-  const decision = await askGPTPlay(roomId, botId);
-  if (!decision) return;
+  // 3秒超时兜底：无论 AI 是否返回，3秒内必须出牌
+  const GPT_TIMEOUT = 3000;
+  let gptDone = false;
 
-  if (decision.action === 'pass') {
+  const decision = await Promise.race([
+    askGPTPlay(roomId, botId).then(d => { gptDone = true; return d; }),
+    new Promise(resolve => setTimeout(() => {
+      if (!gptDone) { console.log(`[BOT] ${currentPlayer.name} AI超时(${GPT_TIMEOUT}ms)，使用随机出牌`); resolve(null); }
+    }, GPT_TIMEOUT))
+  ]);
+
+  let finalDecision = decision;
+  if (!finalDecision) {
+    // 超时或无决策 → 立即使用 fallback（随机合法出牌）
+    finalDecision = getFallbackDecision(state, currentPlayer);
+    console.log(`[BOT] ${currentPlayer.name} fallback: ${finalDecision.action} ${finalDecision.cardIds?.length ?? 0}张`);
+  }
+
+  if (finalDecision.action === 'pass') {
     doPass(roomId, botId);
-  } else if (decision.action === 'play') {
-    const result = doPlay(roomId, botId, decision.cardIds, io);
+  } else if (finalDecision.action === 'play') {
+    const result = doPlay(roomId, botId, finalDecision.cardIds, io);
     if (!result.success) {
       console.error(`[BOT] ${currentPlayer.name} 出牌失败:`, result.error);
-      // 失败时降级
       const fallback = getFallbackDecision(state, currentPlayer);
       if (fallback.action === 'play') {
         doPlay(roomId, botId, fallback.cardIds, io);
@@ -751,30 +765,61 @@ async function main() {
       roomId = String(roomId).toUpperCase();
       const room = rooms.get(roomId);
       if (!room) { cb({ success: false, error: '房间不存在' }); return; }
-      // 允许加入已开始的游戏（同一人重连或从房间页跳转）
+
+      // 优先按 socket.id 匹配（已在房间中的玩家）
+      const existingBySocketId = room.players.find(p => p.id === socket.id);
+      if (existingBySocketId) {
+        // 已有此 socket，直接绑定 currentRoomId（无需 name 匹配）
+        currentRoomId = roomId;
+        socket.join(roomId);
+        console.log(`[R] socket.id=${socket.id} 已存在于 ${roomId}（${existingBySocketId.name}），绑定成功`);
+        if (room.gameState) {
+          const view = buildGameStateView(roomId, socket.id);
+          cb({ success: true, room: sanitizeRoom(room), gameState: view });
+        } else {
+          cb({ success: true, room: sanitizeRoom(room) });
+        }
+        return;
+      }
+
+      // 其次按 name 匹配（跨标签页重连）
       const existingByName = room.players.find(p => p.name === playerName);
       if (existingByName) {
         existingByName.id = socket.id;
         if (room.hostName === playerName) room.hostId = socket.id;
-      } else if (room.status !== 'waiting') {
-        cb({ success: false, error: '游戏已开始，无法加入' }); return;
-      } else if (room.players.length >= 5) {
-        cb({ success: false, error: '房间已满' }); return;
-      } else {
-        room.players.push(makePlayer(socket.id, playerName));
+        currentRoomId = roomId;
+        socket.join(roomId);
+        console.log(`[R] ${playerName} 按名字重连到 ${roomId}，socket.id 更新为 ${socket.id}`);
+        if (room.gameState) {
+          const view = buildGameStateView(roomId, socket.id);
+          cb({ success: true, room: sanitizeRoom(room), gameState: view });
+        } else {
+          cb({ success: true, room: sanitizeRoom(room) });
+        }
+        return;
       }
+
+      // 新玩家加入
+      if (room.status !== 'waiting') {
+        // 游戏已开始，尝试加入并获取游戏状态（快速开始流程需要）
+        if (room.gameState) {
+          currentRoomId = roomId;
+          socket.join(roomId);
+          console.log(`[R] ${playerName} 重新加入已开始的房间 ${roomId}`);
+          const view = buildGameStateView(roomId, socket.id);
+          cb({ success: true, room: sanitizeRoom(room), gameState: view });
+        } else {
+          cb({ success: false, error: '游戏已开始，无法加入' });
+        }
+        return;
+      }
+      if (room.players.length >= 5) { cb({ success: false, error: '房间已满' }); return; }
+      room.players.push(makePlayer(socket.id, playerName));
       currentRoomId = roomId;
       socket.join(roomId);
       socket.to(roomId).emit('room_updated', sanitizeRoom(room));
-      // 如果游戏已在进行中，立即返回游戏状态
-      if (room.gameState) {
-        const view = buildGameStateView(roomId, socket.id);
-        cb({ success: true, room: sanitizeRoom(room), gameState: view });
-        console.log(`[R] ${playerName} 重新加入运行中游戏 ${roomId}`);
-      } else {
-        cb({ success: true, room: sanitizeRoom(room) });
-        console.log(`[R] ${playerName} 加入房间 ${roomId}`);
-      }
+      console.log(`[R] ${playerName} 作为新玩家加入 ${roomId}`);
+      cb({ success: true, room: sanitizeRoom(room) });
     });
 
     socket.on('get_rooms', (cb) => {
@@ -818,20 +863,43 @@ async function main() {
         turnDeadline: Date.now() + TURN_TIMEOUT, result: null,
       };
       room.status = 'playing';
+      // 确保创建者在当前 socket 的 currentRoomId 中（quickStart 跳转后要用）
+      if (socket.id === room.hostId) {
+        currentRoomId = room.id;
+        socket.join(room.id);
+        console.log(`[R] 游戏开始时绑定 ${playerName}(${socket.id}) → 房间 ${room.id}`);
+      }
       broadcastGameState(currentRoomId, io);
-      cb({ success: true });
+      cb({ success: true, gameState: buildGameStateView(currentRoomId, socket.id) });
       console.log(`[G] 房间 ${currentRoomId} 游戏开始，先手: ${room.players[startIdx].name}`);
+
+      // 关键修复：主动为 AI 玩家设置出牌定时器（不依赖 socket 广播）
+      setTimeout(() => {
+        const state = rooms.get(currentRoomId)?.gameState;
+        if (!state || state.status !== 'playing') return;
+        const currentPlayer = state.players[state.currentPlayerIndex];
+        if (currentPlayer && currentPlayer.id.startsWith('bot_')) {
+          console.log(`[BOT] 游戏开始，为 AI ${currentPlayer.name} 设置出牌定时器`);
+          scheduleBotIfNeeded(currentRoomId, io);
+        }
+      }, 100);
     });
 
     socket.on('play_cards', (cardIds, cb) => {
+      if (!currentRoomId) { console.warn(`[PLAY] ${playerName} 出牌失败：currentRoomId=null`); cb({ success: false, error: '不在房间中' }); return; }
+      const room = rooms.get(currentRoomId);
+      const me = room?.gameState?.players.find(p => p.id === socket.id);
+      console.log(`[PLAY] ${playerName}(${socket.id}) 出牌 ${cardIds.length} 张，currentRoomId=${currentRoomId}，在游戏中:${!!me}`);
       const result = doPlay(currentRoomId, socket.id, cardIds, io);
-      if (!result.success) { cb({ success: false, error: result.error }); return; }
+      if (!result.success) { console.warn(`[PLAY] 出牌失败: ${result.error}`); cb({ success: false, error: result.error }); return; }
       broadcastGameState(currentRoomId, io);
       cb({ success: true });
       if (result.finished) io.to(currentRoomId).emit('game_over', result.gameResult);
     });
 
     socket.on('pass', (cb) => {
+      if (!currentRoomId) { console.warn(`[PASS] ${playerName} 跳过失败：currentRoomId=null`); cb({ success: false, error: '不在房间中' }); return; }
+      console.log(`[PASS] ${playerName}(${socket.id}) 跳过，currentRoomId=${currentRoomId}`);
       const result = doPass(currentRoomId, socket.id);
       if (!result.success) { cb({ success: false, error: result.error }); return; }
       broadcastGameState(currentRoomId, io);
