@@ -5,18 +5,17 @@ import { GameStateView, GameResult } from '@/lib/rules/types';
 
 let globalSocket: Socket | null = null;
 
-export function useSocket() {
+export function useSocket(): { socket: Socket | null; connected: boolean } {
   const [connected, setConnected] = useState(false);
-  const socketRef = useRef<Socket | null>(null);
+  const [socketInstance, setSocketInstance] = useState<Socket | null>(null);
 
   useEffect(() => {
     if (globalSocket?.connected) {
-      socketRef.current = globalSocket;
+      setSocketInstance(globalSocket);
       setConnected(true);
       return;
     }
 
-    // Socket.IO 连接 URL（同域名同端口，兼容 Zeabur 部署）
     const socketUrl = typeof window !== 'undefined'
       ? (process.env.NEXT_PUBLIC_SOCKET_URL || window.location.origin)
       : 'http://localhost:3000';
@@ -27,17 +26,17 @@ export function useSocket() {
     });
 
     globalSocket = socket;
-    socketRef.current = socket;
+    setSocketInstance(socket);
 
     socket.on('connect', () => setConnected(true));
     socket.on('disconnect', () => setConnected(false));
 
     return () => {
-      // 不在组件卸载时断开（保持全局连接）
+      // 保持全局连接不断开（供其他组件复用）
     };
   }, []);
 
-  return { socket: socketRef.current, connected };
+  return { socket: socketInstance, connected };
 }
 
 export function useGameSocket(roomId: string | null) {
@@ -58,6 +57,36 @@ export function useGameSocket(roomId: string | null) {
     }
   }, []);
 
+  // 进入游戏页时主动 join_room，同步状态
+  useEffect(() => {
+    if (!socket || !roomId) return;
+
+    // 监听 join_room 返回的游戏状态（游戏已开始时 server 会附带返回）
+    const onJoinRoomResult = (res: { success: boolean; gameState?: GameStateView; error?: string }) => {
+      if (res.success && res.gameState) {
+        setGameState(res.gameState);
+        setError(null);
+      }
+    };
+    socket.on('join_room_result', onJoinRoomResult);
+
+    // 主动加入房间（安全网：防止 game_state 事件漏接）
+    socket.emit('join_room', roomId, (res: { success: boolean; gameState?: GameStateView; error?: string }) => {
+      if (res.success && res.gameState) {
+        setGameState(res.gameState);
+        setError(null);
+      }
+      if (!res.success && res.error) {
+        setError(res.error);
+      }
+    });
+
+    return () => {
+      socket.off('join_room_result', onJoinRoomResult);
+    };
+  }, [socket, roomId]);
+
+  // 注册游戏事件监听
   useEffect(() => {
     if (!socket) return;
 
@@ -91,25 +120,29 @@ export function useGameSocket(roomId: string | null) {
   }, [socket, gameState]);
 
   const playCards = useCallback((cardIds: string[]) => {
-    socket?.emit('play_cards', cardIds, (res: { success: boolean; error?: string }) => {
+    if (!socket) return;
+    socket.emit('play_cards', cardIds, (res: { success: boolean; error?: string }) => {
       if (!res.success) setError(res.error ?? '出牌失败');
     });
   }, [socket]);
 
   const pass = useCallback(() => {
-    socket?.emit('pass', (res: { success: boolean; error?: string }) => {
+    if (!socket) return;
+    socket.emit('pass', (res: { success: boolean; error?: string }) => {
       if (!res.success) setError(res.error ?? '跳过失败');
     });
   }, [socket]);
 
   const windDecision = useCallback((giveWind: boolean) => {
-    socket?.emit('wind_decision', giveWind, (res: { success: boolean; error?: string }) => {
+    if (!socket) return;
+    socket.emit('wind_decision', giveWind, (res: { success: boolean; error?: string }) => {
       if (!res.success) setError(res.error ?? '给风决策失败');
     });
   }, [socket]);
 
   const revealIdentity = useCallback(() => {
-    socket?.emit('reveal_identity', (res: { success: boolean; error?: string }) => {
+    if (!socket) return;
+    socket.emit('reveal_identity', (res: { success: boolean; error?: string }) => {
       if (!res.success) setError(res.error ?? '亮身份失败');
     });
   }, [socket]);

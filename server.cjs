@@ -17,7 +17,7 @@ const dev = process.env.NODE_ENV !== 'production';
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
 const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
 const OPENAI_BASE_URL = (process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, '');
-const BOT_THINK_TIME = parseInt(process.env.BOT_THINK_TIME || '2000', 10);
+const BOT_THINK_TIME = parseInt(process.env.BOT_THINK_TIME || '1000', 10);
 const botTasks = new Map(); // botId -> { roomId, timer }
 
 function clearBotTask(botId) {
@@ -342,7 +342,7 @@ async function askGPTPlay(roomId, botId) {
 
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 8000);
+    const timeout = setTimeout(() => controller.abort(), 5000);
 
     const response = await fetch(`${OPENAI_BASE_URL}/chat/completions`, {
       method: 'POST',
@@ -751,14 +751,13 @@ async function main() {
       roomId = String(roomId).toUpperCase();
       const room = rooms.get(roomId);
       if (!room) { cb({ success: false, error: '房间不存在' }); return; }
-      if (room.status !== 'waiting') { cb({ success: false, error: '游戏已开始' }); return; }
-      // 检查是否已有同名玩家（同一浏览器不同标签页）
+      // 允许加入已开始的游戏（同一人重连或从房间页跳转）
       const existingByName = room.players.find(p => p.name === playerName);
       if (existingByName) {
-        // 同名玩家：更新 socket id（视为同一人重连），不新增
         existingByName.id = socket.id;
-        // 如果断线前是房主，更新房主
         if (room.hostName === playerName) room.hostId = socket.id;
+      } else if (room.status !== 'waiting') {
+        cb({ success: false, error: '游戏已开始，无法加入' }); return;
       } else if (room.players.length >= 5) {
         cb({ success: false, error: '房间已满' }); return;
       } else {
@@ -767,8 +766,15 @@ async function main() {
       currentRoomId = roomId;
       socket.join(roomId);
       socket.to(roomId).emit('room_updated', sanitizeRoom(room));
-      cb({ success: true, room: sanitizeRoom(room) });
-      console.log(`[R] ${playerName} 加入房间 ${roomId}`);
+      // 如果游戏已在进行中，立即返回游戏状态
+      if (room.gameState) {
+        const view = buildGameStateView(roomId, socket.id);
+        cb({ success: true, room: sanitizeRoom(room), gameState: view });
+        console.log(`[R] ${playerName} 重新加入运行中游戏 ${roomId}`);
+      } else {
+        cb({ success: true, room: sanitizeRoom(room) });
+        console.log(`[R] ${playerName} 加入房间 ${roomId}`);
+      }
     });
 
     socket.on('get_rooms', (cb) => {
