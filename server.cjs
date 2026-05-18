@@ -766,33 +766,48 @@ async function main() {
       const room = rooms.get(roomId);
       if (!room) { cb({ success: false, error: '房间不存在' }); return; }
 
-      // 查找同名玩家（同一人重连，包括跨标签页）
+      // 优先按 socket.id 匹配（已在房间中的玩家）
+      const existingBySocketId = room.players.find(p => p.id === socket.id);
+      if (existingBySocketId) {
+        // 已有此 socket，直接绑定 currentRoomId（无需 name 匹配）
+        currentRoomId = roomId;
+        socket.join(roomId);
+        console.log(`[R] socket.id=${socket.id} 已存在于 ${roomId}（${existingBySocketId.name}），绑定成功`);
+        if (room.gameState) {
+          const view = buildGameStateView(roomId, socket.id);
+          cb({ success: true, room: sanitizeRoom(room), gameState: view });
+        } else {
+          cb({ success: true, room: sanitizeRoom(room) });
+        }
+        return;
+      }
+
+      // 其次按 name 匹配（跨标签页重连）
       const existingByName = room.players.find(p => p.name === playerName);
       if (existingByName) {
         existingByName.id = socket.id;
         if (room.hostName === playerName) room.hostId = socket.id;
-        console.log(`[R] ${playerName} 同名重连到 ${roomId}，socket.id 更新为 ${socket.id}`);
-      } else if (room.status !== 'waiting') {
-        cb({ success: false, error: '游戏已开始（玩家名不匹配）' }); return;
-      } else if (room.players.length >= 5) {
-        cb({ success: false, error: '房间已满' }); return;
-      } else {
-        room.players.push(makePlayer(socket.id, playerName));
-        console.log(`[R] ${playerName} 作为新玩家加入 ${roomId}`);
+        currentRoomId = roomId;
+        socket.join(roomId);
+        console.log(`[R] ${playerName} 按名字重连到 ${roomId}，socket.id 更新为 ${socket.id}`);
+        if (room.gameState) {
+          const view = buildGameStateView(roomId, socket.id);
+          cb({ success: true, room: sanitizeRoom(room), gameState: view });
+        } else {
+          cb({ success: true, room: sanitizeRoom(room) });
+        }
+        return;
       }
 
+      // 新玩家加入
+      if (room.status !== 'waiting') { cb({ success: false, error: '游戏已开始，无法加入' }); return; }
+      if (room.players.length >= 5) { cb({ success: false, error: '房间已满' }); return; }
+      room.players.push(makePlayer(socket.id, playerName));
       currentRoomId = roomId;
       socket.join(roomId);
       socket.to(roomId).emit('room_updated', sanitizeRoom(room));
-
-      if (room.gameState) {
-        const view = buildGameStateView(roomId, socket.id);
-        const myPlayer = view ? view.players.find(p => p.id === socket.id) : null;
-        console.log(`[R] ${playerName} 加入运行中游戏 ${roomId}，找到自己: ${myPlayer ? 'YES' : 'NO'}`);
-        cb({ success: true, room: sanitizeRoom(room), gameState: view });
-      } else {
-        cb({ success: true, room: sanitizeRoom(room) });
-      }
+      console.log(`[R] ${playerName} 作为新玩家加入 ${roomId}`);
+      cb({ success: true, room: sanitizeRoom(room) });
     });
 
     socket.on('get_rooms', (cb) => {
