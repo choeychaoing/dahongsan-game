@@ -51,10 +51,11 @@ export default function HomePage() {
 
     if (s.connected) {
       setConnected(true);
-      s.emit('get_rooms', (res: { rooms: RoomInfo[] }) => setRooms(res.rooms));
+      s.emit('get_rooms', (res: { rooms: RoomInfo[] }) => {
+        setRooms(res.rooms);
+      });
     }
 
-    // 从 localStorage 读取上次昵称
     const savedName = localStorage.getItem('playerName');
     if (savedName) setName(savedName);
 
@@ -80,6 +81,29 @@ export default function HomePage() {
       if (res.success && res.roomId) {
         sessionStorage.setItem('mySocketId', socketRef.current!.id!);
         router.push(`/room/${res.roomId}`);
+      } else {
+        setError(res.error ?? '创建失败');
+      }
+    });
+  };
+
+  const quickStart = () => {
+    if (!name.trim()) {
+      setError('请先输入昵称');
+      return;
+    }
+    setPlayerName();
+    socketRef.current?.emit('create_room', (res: { success: boolean; roomId?: string; error?: string }) => {
+      if (res.success && res.roomId) {
+        const roomId = res.roomId;
+        sessionStorage.setItem('mySocketId', socketRef.current!.id!);
+        socketRef.current?.emit('start_game', (startRes: { success: boolean; error?: string }) => {
+          if (startRes.success) {
+            router.push(`/game/${roomId}`);
+          } else {
+            setError(startRes.error ?? '开始失败');
+          }
+        });
       } else {
         setError(res.error ?? '创建失败');
       }
@@ -114,7 +138,6 @@ export default function HomePage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-900 to-green-700 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md">
-        {/* 标题 */}
         <div className="text-center mb-6">
           <div className="text-4xl font-bold text-red-600">🃏 打红三</div>
           <div className="text-gray-500 text-sm mt-1">5人在线扑克游戏</div>
@@ -123,7 +146,6 @@ export default function HomePage() {
           </div>
         </div>
 
-        {/* 昵称 */}
         <div className="mb-4">
           <label className="block text-sm font-medium text-gray-700 mb-1">我的昵称</label>
           <input
@@ -137,14 +159,21 @@ export default function HomePage() {
           />
         </div>
 
-        {/* 错误 */}
         {error && (
           <div className="mb-3 text-red-500 text-sm text-center bg-red-50 rounded-lg py-2 px-3">
             {error}
           </div>
         )}
 
-        {/* 创建房间 */}
+        <button
+          onClick={quickStart}
+          className="w-full py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl font-bold text-lg hover:from-purple-700 hover:to-pink-700 active:scale-95 transition mb-3 shadow-lg"
+        >
+          🚀 快速开始（AI 对战）
+        </button>
+
+        <div className="text-center text-xs text-gray-400 mb-3">— 或 —</div>
+
         <button
           onClick={createRoom}
           className="w-full py-3 bg-red-600 text-white rounded-xl font-bold text-lg hover:bg-red-700 active:scale-95 transition mb-3"
@@ -152,7 +181,6 @@ export default function HomePage() {
           ✨ 创建房间
         </button>
 
-        {/* 加入房间 */}
         <div className="flex gap-2 mb-4">
           <input
             type="text"
@@ -170,7 +198,6 @@ export default function HomePage() {
           </button>
         </div>
 
-        {/* 房间列表 */}
         <div>
           <div className="flex items-center justify-between mb-2">
             <span className="text-sm font-medium text-gray-600">等待中的房间</span>
@@ -208,7 +235,6 @@ export default function HomePage() {
           )}
         </div>
 
-        {/* 规则简介 */}
         <div className="mt-4 text-xs text-gray-400 text-center">
           5人 · 54张牌 · 方片3公开 · 红桃5先出<br />
           只能出单张、对子、炸弹 · 红桃5最小
