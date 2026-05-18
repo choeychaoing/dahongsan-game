@@ -60,11 +60,16 @@ interface HandProps {
 }
 
 export function Hand({ cards, selectedIds, onToggle, disabled }: HandProps) {
-  // 对手牌排序：按 suit 和 rank 排列
-  const sorted = [...cards].sort((a, b) => {
-    const rankOrder = ['2','3','4','5','6','7','8','9','10','J','Q','K','A','small_joker','big_joker'];
-    return rankOrder.indexOf(a.rank) - rankOrder.indexOf(b.rank);
-  });
+  // 手牌按牌力从大到小排序：大王→小王→4→3→2→A→K→Q→J→10→9→8→7→6→5（游戏规则中 4最大 5最小）
+  const RANK_POWER: Record<string, number> = {
+    'big_joker': 15, 'small_joker': 14,
+    '4': 13, '3': 12, '2': 11, 'A': 10,
+    'K': 9, 'Q': 8, 'J': 7,
+    '10': 6, '9': 5, '8': 4, '7': 3, '6': 2, '5': 1,
+  };
+  const sorted = [...cards].sort((a, b) =>
+    (RANK_POWER[b.rank] ?? 0) - (RANK_POWER[a.rank] ?? 0)
+  );
 
   return (
     <div className="flex flex-wrap gap-1 justify-center p-2">
