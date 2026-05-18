@@ -61,7 +61,9 @@ export default function RoomPage() {
       setRoom(updatedRoom);
     };
 
-    const onGameState = () => {
+    const onGameState = (state: unknown) => {
+      // 将 gameState 存入 sessionStorage，game 页面直接读取
+      sessionStorage.setItem('pendingGameState', JSON.stringify(state));
       router.push(`/game/${roomId}`);
     };
 

@@ -131,8 +131,8 @@ export default function HomePage() {
             value={name}
             onChange={e => setName(e.target.value)}
             onBlur={setPlayerName}
-            placeholder="输入昵称（最多12字）"
-            maxLength={12}
+            placeholder="输入昵称（最多30字）"
+            maxLength={30}
             className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
           />
         </div>

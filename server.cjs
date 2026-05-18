@@ -321,7 +321,7 @@ async function main() {
     console.log(`[+] 连接: ${socket.id}`);
 
     socket.on('set_name', (name) => {
-      if (typeof name === 'string' && name.trim()) playerName = name.trim().slice(0, 12);
+      if (typeof name === 'string' && name.trim()) playerName = name.trim().slice(0, 30);
     });
 
     socket.on('create_room', (cb) => {

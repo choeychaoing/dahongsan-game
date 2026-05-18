@@ -9,20 +9,20 @@ const GameTable = dynamic(() => import('@/components/GameTable'), { ssr: false }
 export default function GamePage() {
   const params = useParams();
   const roomId = params.roomId as string;
-  const [mySocketId, setMySocketId] = useState('');
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    const id = sessionStorage.getItem('mySocketId') ?? '';
-    setMySocketId(id);
+    // 从房间页面跳转过来时，socket 已连接，无需等待 mySocketId
+    setReady(true);
   }, []);
 
-  if (!mySocketId) {
+  if (!ready) {
     return (
       <div className="flex items-center justify-center h-screen bg-green-800 text-white">
-        <div className="animate-pulse">正在连接...</div>
+        <div className="animate-pulse">正在加载...</div>
       </div>
     );
   }
 
-  return <GameTable roomId={roomId} mySocketId={mySocketId} />;
+  return <GameTable roomId={roomId} />;
 }

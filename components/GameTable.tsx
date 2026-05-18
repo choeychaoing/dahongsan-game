@@ -9,7 +9,6 @@ import { io } from 'socket.io-client';
 
 interface GameTableProps {
   roomId: string;
-  mySocketId: string;
 }
 
 let _socket: ReturnType<typeof io> | null = null;
@@ -22,7 +21,7 @@ function getSocket() {
   return _socket;
 }
 
-export default function GameTable({ roomId, mySocketId }: GameTableProps) {
+export default function GameTable({ roomId }: GameTableProps) {
   const router = useRouter();
   const { gameState, gameOver, error, connected, playCards, pass, windDecision, revealIdentity, clearError } =
     useGameSocket(roomId);
@@ -30,7 +29,7 @@ export default function GameTable({ roomId, mySocketId }: GameTableProps) {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [countdown, setCountdown] = useState<number | null>(null);
 
-  const myId = mySocketId;
+  const myId = (typeof window !== 'undefined' && _socket?.id) || '';
   const me = gameState?.players.find(p => p.id === myId);
   const isMyTurn = gameState?.currentPlayerId === myId;
 
