@@ -318,7 +318,7 @@ async function main() {
             return;
           }
           let joined = 0;
-          (data.botNames || []).forEach((name: string) => {
+          (data.botNames || []).forEach((name) => {
             room.players.push(makePlayer(
               'bot_' + Math.random().toString(36).slice(2, 10),
               String(name).slice(0, 30)
