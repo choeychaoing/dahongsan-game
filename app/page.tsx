@@ -168,10 +168,7 @@ export default function HomePage() {
           </div>
         )}
 
-<<<<<<< HEAD
         {/* 快速开始：创建房间 + 自动补位机器人 + 直接开始 */}
-=======
->>>>>>> origin/main
         <button
           onClick={quickStart}
           className="w-full py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl font-bold text-lg hover:from-purple-700 hover:to-pink-700 active:scale-95 transition mb-3 shadow-lg"
@@ -181,10 +178,7 @@ export default function HomePage() {
 
         <div className="text-center text-xs text-gray-400 mb-3">— 或 —</div>
 
-<<<<<<< HEAD
         {/* 创建房间 */}
-=======
->>>>>>> origin/main
         <button
           onClick={createRoom}
           className="w-full py-3 bg-red-600 text-white rounded-xl font-bold text-lg hover:bg-red-700 active:scale-95 transition mb-3"
