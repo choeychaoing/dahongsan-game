@@ -5,20 +5,9 @@ import { Hand, CardComponent } from '@/components/Card';
 import { PlayerSeat } from '@/components/PlayerSeat';
 import { Play } from '@/lib/rules/types';
 import { useRouter } from 'next/navigation';
-import { io } from 'socket.io-client';
 
 interface GameTableProps {
   roomId: string;
-}
-
-let _socket: ReturnType<typeof io> | null = null;
-
-function getSocket() {
-  if (!_socket) {
-    const url = process.env.NEXT_PUBLIC_SOCKET_URL || window.location.origin;
-    _socket = io(url, { path: '/socket.io', transports: ['websocket', 'polling'] });
-  }
-  return _socket;
 }
 
 export default function GameTable({ roomId }: GameTableProps) {
@@ -29,7 +18,8 @@ export default function GameTable({ roomId }: GameTableProps) {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [countdown, setCountdown] = useState<number | null>(null);
 
-  const myId = (typeof window !== 'undefined' && _socket?.id) || '';
+  // 关键修复：从 sessionStorage 读取创建房间时保存的 socketId，而不是用新 socket 的 id
+  const myId = (typeof window !== 'undefined' && sessionStorage.getItem('mySocketId')) || '';
   const me = gameState?.players.find(p => p.id === myId);
   const isMyTurn = gameState?.currentPlayerId === myId;
 
