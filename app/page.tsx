@@ -1,21 +1,8 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
-import { io, Socket } from 'socket.io-client';
+import { Socket } from 'socket.io-client';
 import { useRouter } from 'next/navigation';
-
-let socket: Socket | null = null;
-
-function getSocketUrl() {
-  if (typeof window === 'undefined') return 'http://localhost:3000';
-  return process.env.NEXT_PUBLIC_SOCKET_URL || window.location.origin;
-}
-
-function getSocket() {
-  if (!socket) {
-    socket = io(getSocketUrl(), { path: '/socket.io', transports: ['websocket', 'polling'] });
-  }
-  return socket;
-}
+import { getGlobalSocket } from '@/lib/socket';
 
 interface RoomInfo {
   id: string;
@@ -35,7 +22,7 @@ export default function HomePage() {
   const socketRef = useRef<Socket | null>(null);
 
   useEffect(() => {
-    const s = getSocket();
+    const s = getGlobalSocket();
     socketRef.current = s;
 
     s.on('connect', () => {

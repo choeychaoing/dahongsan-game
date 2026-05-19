@@ -12,14 +12,12 @@ interface GameTableProps {
 
 export default function GameTable({ roomId }: GameTableProps) {
   const router = useRouter();
-  const { gameState, gameOver, error, connected, playCards, pass, windDecision, revealIdentity, clearError } =
+  const { gameState, gameOver, error, connected, myId, playCards, pass, windDecision, revealIdentity, clearError } =
     useGameSocket(roomId);
 
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [countdown, setCountdown] = useState<number | null>(null);
 
-  // 关键修复：从 sessionStorage 读取创建房间时保存的 socketId，而不是用新 socket 的 id
-  const myId = (typeof window !== 'undefined' && sessionStorage.getItem('mySocketId')) || '';
   const me = gameState?.players.find(p => p.id === myId);
   const isMyTurn = gameState?.currentPlayerId === myId;
 

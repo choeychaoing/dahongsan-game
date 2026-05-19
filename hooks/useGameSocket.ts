@@ -1,42 +1,34 @@
 'use client';
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { io, Socket } from 'socket.io-client';
 import { GameStateView, GameResult } from '@/lib/rules/types';
-
-let globalSocket: Socket | null = null;
+import { getGlobalSocket } from '@/lib/socket';
+import { Socket } from 'socket.io-client';
 
 export function useSocket(): { socket: Socket | null; connected: boolean } {
   const [connected, setConnected] = useState(false);
-  const [socketInstance, setSocketInstance] = useState<Socket | null>(null);
+  const socketRef = useRef<Socket | null>(null);
 
   useEffect(() => {
-    if (globalSocket?.connected) {
-      setSocketInstance(globalSocket);
+    const s = getGlobalSocket();
+    socketRef.current = s;
+
+    if (s.connected) {
       setConnected(true);
-      return;
     }
 
-    const socketUrl = typeof window !== 'undefined'
-      ? (process.env.NEXT_PUBLIC_SOCKET_URL || window.location.origin)
-      : 'http://localhost:3000';
+    const onConnect = () => setConnected(true);
+    const onDisconnect = () => setConnected(false);
 
-    const socket = io(socketUrl, {
-      path: '/socket.io',
-      transports: ['websocket', 'polling'],
-    });
-
-    globalSocket = socket;
-    setSocketInstance(socket);
-
-    socket.on('connect', () => setConnected(true));
-    socket.on('disconnect', () => setConnected(false));
+    s.on('connect', onConnect);
+    s.on('disconnect', onDisconnect);
 
     return () => {
-      // 保持全局连接不断开（供其他组件复用）
+      s.off('connect', onConnect);
+      s.off('disconnect', onDisconnect);
     };
   }, []);
 
-  return { socket: socketInstance, connected };
+  return { socket: socketRef.current ?? (typeof window !== 'undefined' ? getGlobalSocket() : null), connected };
 }
 
 export function useGameSocket(roomId: string | null) {
@@ -44,8 +36,10 @@ export function useGameSocket(roomId: string | null) {
   const [gameState, setGameState] = useState<GameStateView | null>(null);
   const [gameOver, setGameOver] = useState<GameResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // myId 始终跟着 socket.id 走
+  const [myId, setMyId] = useState<string>('');
 
-  // 优先从 sessionStorage 读取（房间页面跳转时已缓存）
+  // 从 sessionStorage 读取初始 gameState（room 页面跳转时存入）
   useEffect(() => {
     const cached = sessionStorage.getItem('pendingGameState');
     if (cached) {
@@ -57,36 +51,28 @@ export function useGameSocket(roomId: string | null) {
     }
   }, []);
 
-  // 进入游戏页时主动 join_room，同步状态
+  // socket 连接后同步 myId，并确保 socket 的 currentRoomId 已绑定
   useEffect(() => {
-    if (!socket || !roomId) return;
+    if (!socket) return;
 
-    // 监听 join_room 返回的游戏状态（游戏已开始时 server 会附带返回）
-    const onJoinRoomResult = (res: { success: boolean; gameState?: GameStateView; error?: string }) => {
-      if (res.success && res.gameState) {
-        setGameState(res.gameState);
-        setError(null);
+    const syncMyId = () => {
+      if (socket.id) {
+        setMyId(socket.id);
+        // 同时更新 sessionStorage，供 GameTable fallback 使用
+        sessionStorage.setItem('mySocketId', socket.id);
       }
     };
-    socket.on('join_room_result', onJoinRoomResult);
 
-    // 主动加入房间（安全网：防止 game_state 事件漏接）
-    socket.emit('join_room', roomId, (res: { success: boolean; gameState?: GameStateView; error?: string }) => {
-      if (res.success && res.gameState) {
-        setGameState(res.gameState);
-        setError(null);
-      }
-      if (!res.success && res.error) {
-        setError(res.error);
-      }
-    });
+    // 如果已连接直接同步
+    if (socket.connected && socket.id) {
+      syncMyId();
+    }
 
-    return () => {
-      socket.off('join_room_result', onJoinRoomResult);
-    };
-  }, [socket, roomId]);
+    socket.on('connect', syncMyId);
+    return () => { socket.off('connect', syncMyId); };
+  }, [socket]);
 
-  // 注册游戏事件监听
+  // 注册游戏事件监听（不主动 join_room，room 页面已经处理过了）
   useEffect(() => {
     if (!socket) return;
 
@@ -152,6 +138,7 @@ export function useGameSocket(roomId: string | null) {
     gameOver,
     error,
     connected,
+    myId,
     playCards,
     pass,
     windDecision,
