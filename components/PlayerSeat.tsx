@@ -15,20 +15,27 @@ const CAMP_LABEL: Record<string, string> = {
 export function PlayerSeat({ player, isMe, isCurrentTurn }: PlayerSeatProps) {
   const campLabel = player.camp ? CAMP_LABEL[player.camp] : null;
   const revealBadge = player.revealStatus === 'revealed' ? '🎭 已亮' : null;
+  const isFinished = player.status === 'finished';
 
   return (
     <div
       className={`
-        flex flex-col items-center gap-1 p-2 rounded-xl border-2 min-w-[80px]
+        flex flex-col items-center gap-1 p-3 rounded-xl border-2 min-w-[90px]
         transition-all
         ${isCurrentTurn ? 'border-yellow-400 bg-yellow-50 shadow-lg scale-105' : 'border-gray-200 bg-white'}
         ${isMe ? 'ring-2 ring-blue-400' : ''}
-        ${player.status === 'finished' ? 'opacity-60' : ''}
+        ${isFinished ? 'opacity-60' : ''}
       `}
     >
-      <div className="font-semibold text-sm truncate max-w-[72px]">
+      {/* 名字 - 更大更明显 */}
+      <div className="font-bold text-base truncate max-w-[80px]" title={player.name}>
         {player.name}
-        {isMe && <span className="text-blue-400 text-xs ml-1">（我）</span>}
+        {isMe && <span className="text-blue-500 text-xs ml-1">（我）</span>}
+      </div>
+
+      {/* 手牌数量 */}
+      <div className="text-xs text-gray-500">
+        {isFinished ? '🏁 已跑完' : `剩 ${player.handCount} 张`}
       </div>
 
       {/* 当前轮次指示 */}
@@ -38,21 +45,23 @@ export function PlayerSeat({ player, isMe, isCurrentTurn }: PlayerSeatProps) {
 
       {/* 完成名次 */}
       {player.finishRank && (
-        <div className="text-xs font-bold text-green-600">第{player.finishRank}名 🎉</div>
+        <div className="text-sm font-bold text-green-600 bg-green-100 px-2 py-0.5 rounded">
+          🎉 第{player.finishRank}名
+        </div>
       )}
 
-      {/* 身份 */}
+      {/* 身份（亮出来才显示） */}
       {campLabel && (
-        <div className={`text-xs px-1 rounded ${player.camp === 'red3' ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-700'}`}>
+        <div className={`text-xs px-1.5 py-0.5 rounded font-medium ${player.camp === 'red3' ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-700'}`}>
           {campLabel}
         </div>
       )}
-      {!campLabel && player.status !== 'finished' && (
+      {!campLabel && !isFinished && (
         <div className="text-xs text-gray-400">身份未知</div>
       )}
 
       {revealBadge && (
-        <div className="text-xs text-purple-600">{revealBadge}</div>
+        <div className="text-xs text-purple-600 font-medium">{revealBadge}</div>
       )}
     </div>
   );
