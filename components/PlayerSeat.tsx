@@ -27,7 +27,8 @@ export function PlayerSeat({ player, isMe, isCurrentTurn }: PlayerSeatProps) {
       `}
     >
       {/* 名字 - 最突出 */}
-      <div className="font-bold text-base truncate max-w-[80px]" title={player.name}>
+      <div className={`font-bold text-base truncate max-w-[100px] ${isCurrentTurn ? 'text-yellow-700' : 'text-gray-800'}`} title={player.name}>
+        {isCurrentTurn && <span className="mr-1">▶</span>}
         {player.name}
         {isMe && <span className="text-blue-500 text-xs ml-1">（我）</span>}
       </div>
@@ -39,7 +40,7 @@ export function PlayerSeat({ player, isMe, isCurrentTurn }: PlayerSeatProps) {
 
       {/* 当前轮次指示 */}
       {isCurrentTurn && (
-        <div className="text-xs text-yellow-600 font-bold animate-pulse">⬆ 出牌中</div>
+        <div className="text-xs text-yellow-700 font-bold animate-pulse bg-yellow-200 px-2 py-0.5 rounded-full">出牌中</div>
       )}
 
       {/* 完成名次 */}

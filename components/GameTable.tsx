@@ -67,7 +67,14 @@ export default function GameTable({ roomId }: GameTableProps) {
     );
   }
 
-  const otherPlayers = gameState.players.filter(p => p.id !== myId);
+  // 按座位顺序排列其他玩家（以当前玩家为基准，顺时针方向）
+  const myIndex = gameState.players.findIndex(p => p.id === myId);
+  const otherPlayers = myIndex >= 0
+    ? [
+        ...gameState.players.slice(myIndex + 1),
+        ...gameState.players.slice(0, myIndex),
+      ].filter(p => p.id !== myId)
+    : gameState.players.filter(p => p.id !== myId);
   const windRequired = gameState.windDecision.required && gameState.windDecision.decisionPlayerId === myId;
 
   // 渲染当前桌面牌
