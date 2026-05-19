@@ -14,7 +14,6 @@ const CAMP_LABEL: Record<string, string> = {
 
 export function PlayerSeat({ player, isMe, isCurrentTurn }: PlayerSeatProps) {
   const campLabel = player.camp ? CAMP_LABEL[player.camp] : null;
-  const revealBadge = player.revealStatus === 'revealed' ? '🎭 已亮' : null;
   const isFinished = player.status === 'finished';
 
   return (
@@ -27,13 +26,13 @@ export function PlayerSeat({ player, isMe, isCurrentTurn }: PlayerSeatProps) {
         ${isFinished ? 'opacity-60' : ''}
       `}
     >
-      {/* 名字 - 更大更明显 */}
+      {/* 名字 - 最突出 */}
       <div className="font-bold text-base truncate max-w-[80px]" title={player.name}>
         {player.name}
         {isMe && <span className="text-blue-500 text-xs ml-1">（我）</span>}
       </div>
 
-      {/* 手牌数量 */}
+      {/* 手牌数量 / 已跑完 */}
       <div className="text-xs text-gray-500">
         {isFinished ? '🏁 已跑完' : `剩 ${player.handCount} 张`}
       </div>
@@ -50,18 +49,11 @@ export function PlayerSeat({ player, isMe, isCurrentTurn }: PlayerSeatProps) {
         </div>
       )}
 
-      {/* 身份（亮出来才显示） */}
+      {/* 身份（只有亮出来才显示） */}
       {campLabel && (
         <div className={`text-xs px-1.5 py-0.5 rounded font-medium ${player.camp === 'red3' ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-700'}`}>
-          {campLabel}
+          {campLabel} 🎭 已亮
         </div>
-      )}
-      {!campLabel && !isFinished && (
-        <div className="text-xs text-gray-400">身份未知</div>
-      )}
-
-      {revealBadge && (
-        <div className="text-xs text-purple-600 font-medium">{revealBadge}</div>
       )}
     </div>
   );
