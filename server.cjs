@@ -233,7 +233,7 @@ function buildGameStateView(roomId, viewerId) {
   const state = room.gameState;
   const playerViews = state.players.map((p, idx) => ({
     id: p.id, name: p.name, handCount: p.hand.length, status: p.status,
-    camp: p.revealStatus === 'revealed' ? p.camp : null,
+    camp: p.camp,
     revealStatus: p.revealStatus, finishRank: p.finishRank,
     isCurrentPlayer: idx === state.currentPlayerIndex,
   }));
