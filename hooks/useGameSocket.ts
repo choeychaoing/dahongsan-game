@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { GameStateView, GameResult } from '@/lib/rules/types';
+import { GameStateView, GameResult, Card } from '@/lib/rules/types';
 import { getGlobalSocket } from '@/lib/socket';
 import { Socket } from 'socket.io-client';
 
@@ -38,6 +38,8 @@ export function useGameSocket(roomId: string | null) {
   const [error, setError] = useState<string | null>(null);
   // myId 始终跟着 socket.id 走
   const [myId, setMyId] = useState<string>('');
+  // 保存上一次的手牌，防止 socket 事件覆盖时手牌消失
+  const lastHandRef = useRef<Card[]>([]);
 
   // 从 sessionStorage 读取初始 gameState（room 页面跳转时存入）
   useEffect(() => {
@@ -45,6 +47,9 @@ export function useGameSocket(roomId: string | null) {
     if (cached) {
       try {
         const state = JSON.parse(cached) as GameStateView;
+        if (state.myHand && state.myHand.length > 0) {
+          lastHandRef.current = state.myHand;
+        }
         setGameState(state);
         sessionStorage.removeItem('pendingGameState');
       } catch {}
@@ -77,6 +82,16 @@ export function useGameSocket(roomId: string | null) {
     if (!socket) return;
 
     const onGameState = (state: GameStateView) => {
+      // 防御：如果新手牌为空但 ref 有手牌，且玩家还在游戏中，保留旧手牌
+      const me = state.players.find(p => p.id === myId || p.id === socket?.id);
+      if (state.myHand.length === 0 && lastHandRef.current.length > 0 && me?.status === 'playing') {
+        setGameState({ ...state, myHand: lastHandRef.current });
+        return;
+      }
+      // 更新 ref 中的手牌
+      if (state.myHand.length > 0) {
+        lastHandRef.current = state.myHand;
+      }
       setGameState(state);
       setError(null);
     };
